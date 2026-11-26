@@ -80,9 +80,9 @@ jobs:
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
-          name: ShareDesk Pro server (approved devices only)
+          name: ShareDesk Pro server (approved masters only)
           body: |
-            hbbs/hbbr from rustdesk-server ${{ env.SERVER_REF }} with the ShareDesk Pro device allowlist (AGPL-3.0).
+            hbbs/hbbr from rustdesk-server ${{ env.SERVER_REF }} with the ShareDesk Pro approved-masters allowlist (AGPL-3.0).
             Patch: server/allowlist.rs, server/apply_allowlist.py. Install: server/README.md.
           files: |
             out/hbbs

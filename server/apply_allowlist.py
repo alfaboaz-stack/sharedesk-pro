@@ -1,4 +1,4 @@
-"""Add the ShareDesk Pro device allowlist to a rustdesk-server checkout.
+"""Add the ShareDesk Pro approved-masters allowlist to a rustdesk-server checkout.
 
 Usage: python3 apply_allowlist.py <path-to-rustdesk-server>
 
@@ -44,28 +44,13 @@ def main():
     edit(
         rs,
         '                        log::trace!("New peer registered: {:?} {:?}", &rp.id, &addr);\n',
-        "                        if !crate::allowlist::is_registration_allowed(&rp.id, addr) {\n"
-        "                            crate::allowlist::report_denied(&rp.id, addr);\n"
-        "                            return Ok(());\n"
-        "                        }\n"
-        "                        crate::allowlist::note_peer(addr);\n"
+        "                        crate::allowlist::note_registration(&rp.id, addr);\n"
         '                        log::trace!("New peer registered: {:?} {:?}", &rp.id, &addr);\n',
     )
     edit(
         rs,
-        "                    let id = rk.id;\n",
-        "                    let id = rk.id;\n"
-        "                    if !crate::allowlist::is_registration_allowed(&id, addr) {\n"
-        "                        crate::allowlist::report_denied(&id, addr);\n"
-        "                        return Ok(());\n"
-        "                    }\n",
-    )
-    edit(
-        rs,
         "        let id = ph.id;\n        // punch hole request from A, relay to B,\n",
-        "        if !crate::allowlist::is_id_allowed(&ph.id)\n"
-        "            || !crate::allowlist::is_requester_allowed(addr)\n"
-        "        {\n"
+        "        if !crate::allowlist::is_requester_allowed(addr) {\n"
         '            log::warn!("ShareDesk allowlist: refused connection from {} to {}", addr, ph.id);\n'
         "            let mut msg_out = RendezvousMessage::new();\n"
         "            msg_out.set_punch_hole_response(PunchHoleResponse {\n"
@@ -78,14 +63,24 @@ def main():
     )
     edit(
         rs,
+        "            // record punch hole request (from addr -> peer id/peer_addr)\n",
+        "            crate::allowlist::note_target(peer_addr);\n"
+        "            // record punch hole request (from addr -> peer id/peer_addr)\n",
+    )
+    edit(
+        rs,
         "                    if let Some(peer) = self.pm.get_in_memory(&rf.id).await {\n",
-        "                    if !crate::allowlist::is_id_allowed(&rf.id)\n"
-        "                        || !crate::allowlist::is_requester_allowed(addr)\n"
-        "                    {\n"
+        "                    if !crate::allowlist::is_requester_allowed(addr) {\n"
         '                        log::warn!("ShareDesk allowlist: refused relay from {} to {}", addr, rf.id);\n'
         "                        return true;\n"
         "                    }\n"
         "                    if let Some(peer) = self.pm.get_in_memory(&rf.id).await {\n",
+    )
+    edit(
+        rs,
+        "                        let peer_addr = peer.read().await.socket_addr;\n",
+        "                        let peer_addr = peer.read().await.socket_addr;\n"
+        "                        crate::allowlist::note_target(peer_addr);\n",
     )
 
     edit(

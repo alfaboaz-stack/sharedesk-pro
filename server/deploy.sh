@@ -1,12 +1,12 @@
 #!/bin/bash
-# ShareDesk Pro server: install the approved-devices allowlist on the RustDesk server.
+# ShareDesk Pro server: only approved masters (controlling devices) may open connections.
 #
 #   sudo bash deploy.sh prepare    install binaries + sync job, print the deploy key (no restart)
 #   sudo bash deploy.sh activate   fetch the approved list, switch the server to it, verify
 #   sudo bash deploy.sh status     show what is running and the approved/pending devices
 #   sudo bash deploy.sh rollback   go back to the original server (no allowlist)
 #
-# Approved IDs live in the private GitHub repo $DEVICES_REPO (file allowed_ids.txt);
+# Approved master IDs live in the private GitHub repo $DEVICES_REPO (file allowed_ids.txt);
 # the server pulls it every minute with a read-only deploy key.
 set -euo pipefail
 
@@ -81,8 +81,8 @@ activate() {
   "$SYNC"
   local n
   n=$(sed 's/#.*//' "$DATA/allowed_ids.txt" | awk 'NF' | wc -l)
-  [ "$n" -ge 1 ] || { echo "allowed_ids.txt has no device; refusing to lock everyone out"; exit 1; }
-  echo "approved devices: $n"
+  [ "$n" -ge 1 ] || { echo "allowed_ids.txt has no device; no approved master: refusing to lock everyone out"; exit 1; }
+  echo "approved masters: $n"
   echo '* * * * * root '"$SYNC"' >/dev/null 2>>/var/log/sharedesk-allowlist.log' > "$CRON"
 
   local relay
@@ -90,7 +90,7 @@ activate() {
   [ -n "$relay" ] || { echo "cannot find RELAY in run.sh.before-allowlist"; exit 1; }
   cat > "$BASE/run.sh" <<EOF
 #!/bin/bash
-# ShareDesk Pro: RustDesk server with the approved-devices allowlist.
+# ShareDesk Pro: RustDesk server; only approved masters may open connections.
 # Original version: run.sh.before-allowlist
 docker pull rustdesk/rustdesk-server-s6:latest
 docker rm -f rustdesk-server 2>/dev/null
@@ -114,8 +114,9 @@ status() {
   docker ps --filter name=rustdesk-server --format '{{.Names}}  {{.Status}}'
   docker logs --tail 200 rustdesk-server 2>&1 | grep -E "ShareDesk|ERROR|panicked" | tail -15 || true
   ss -lntup | grep -E ':2111[5-7]' || true
-  echo "--- approved:"; cat "$DATA/allowed_ids.txt" 2>/dev/null || echo "(none)"
-  echo "--- pending (tried without approval):"; cat "$DATA/pending_ids.txt" 2>/dev/null || echo "(none)"
+  echo "--- approved masters:"; cat "$DATA/allowed_ids.txt" 2>/dev/null || echo "(none)"
+  echo "--- refused connection attempts (last 200 log lines):"
+  docker logs --tail 200 rustdesk-server 2>&1 | grep "ShareDesk allowlist: refused" | tail -5 || true
 }
 
 rollback() {
