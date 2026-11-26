@@ -39,8 +39,13 @@ jobs:
 
           [target.'cfg(target_env = "musl")'.dependencies]
           openssl = { version = "0.10", features = ["vendored"] }
+
+          # hbb_common is also a build-dependency, compiled for the host inside the cross image.
+          [build-dependencies.openssl]
+          version = "0.10"
+          features = ["vendored"]
           EOF
-          tail -3 rds/Cargo.toml
+          tail -8 rds/Cargo.toml
 
       - name: Install Rust
         run: |
