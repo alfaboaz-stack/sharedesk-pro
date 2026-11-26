@@ -32,6 +32,16 @@ jobs:
       - name: Apply allowlist patch
         run: python3 server/apply_allowlist.py rds
 
+      - name: Use vendored OpenSSL for the static musl build
+        run: |
+          grep -q "target_env = \"musl\"" rds/Cargo.toml && { echo "musl section already exists"; exit 1; }
+          cat >> rds/Cargo.toml <<'EOF'
+
+          [target.'cfg(target_env = "musl")'.dependencies]
+          openssl = { version = "0.10", features = ["vendored"] }
+          EOF
+          tail -3 rds/Cargo.toml
+
       - name: Install Rust
         run: |
           rustup toolchain install stable --profile minimal
