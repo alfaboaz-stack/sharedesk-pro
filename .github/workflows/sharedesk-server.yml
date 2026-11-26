@@ -1,0 +1,76 @@
+name: ShareDesk Pro - server build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # rustdesk/rustdesk-server commit the allowlist patch was written and tested against.
+  SERVER_REPO: rustdesk/rustdesk-server
+  SERVER_REF: 680b60395ecf99a76f74a1d934e453bb6e5e0aa2
+  TARGET: x86_64-unknown-linux-musl
+  TAG_NAME: sharedesk-server
+
+jobs:
+  build:
+    name: Build hbbs/hbbr with device allowlist (linux amd64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout ShareDesk Pro
+        uses: actions/checkout@v4
+
+      - name: Checkout rustdesk-server
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SERVER_REPO }}
+          ref: ${{ env.SERVER_REF }}
+          path: rds
+          submodules: recursive
+
+      - name: Apply allowlist patch
+        run: python3 server/apply_allowlist.py rds
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add "$TARGET"
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Unit tests
+        working-directory: rds
+        run: cargo test --release --lib allowlist
+
+      - name: Build
+        working-directory: rds
+        run: cross build --release --target "$TARGET" --bin hbbs --bin hbbr
+
+      - name: Package
+        run: |
+          mkdir -p out
+          cp "rds/target/$TARGET/release/hbbs" "rds/target/$TARGET/release/hbbr" out/
+          cp server/deploy.sh out/
+          chmod +x out/*
+          file out/hbbs out/hbbr
+          cd out && sha256sum hbbs hbbr deploy.sh > SHA256SUMS && cat SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          name: ShareDesk Pro server (approved devices only)
+          body: |
+            hbbs/hbbr from rustdesk-server ${{ env.SERVER_REF }} with the ShareDesk Pro device allowlist (AGPL-3.0).
+            Patch: server/allowlist.rs, server/apply_allowlist.py. Install: server/README.md.
+          files: |
+            out/hbbs
+            out/hbbr
+            out/deploy.sh
+            out/SHA256SUMS
