@@ -41,11 +41,25 @@ def main():
     )
 
     rs = src / "rendezvous_server.rs"
+    # A master's address is remembered only after hbbs has verified the device:
+    # a periodic registration from the address it is already known at (with a
+    # key on file), or an accepted RegisterPk (uuid/key checks passed). A bare
+    # RegisterPeer claiming someone else's ID is not enough.
     edit(
         rs,
-        '                        log::trace!("New peer registered: {:?} {:?}", &rp.id, &addr);\n',
-        "                        crate::allowlist::note_registration(&rp.id, addr);\n"
-        '                        log::trace!("New peer registered: {:?} {:?}", &rp.id, &addr);\n',
+        "            if !request_pk {\n"
+        "                old.socket_addr = socket_addr;\n",
+        "            if !request_pk {\n"
+        "                crate::allowlist::note_registration(&id, socket_addr);\n"
+        "                old.socket_addr = socket_addr;\n",
+    )
+    edit(
+        rs,
+        "                    if changed {\n"
+        "                        self.pm.update_pk(id, peer, addr, rk.uuid, rk.pk, ip).await;\n",
+        "                    crate::allowlist::note_registration(&id, addr);\n"
+        "                    if changed {\n"
+        "                        self.pm.update_pk(id, peer, addr, rk.uuid, rk.pk, ip).await;\n",
     )
     edit(
         rs,
