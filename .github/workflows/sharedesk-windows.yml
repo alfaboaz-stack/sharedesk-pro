@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   SCITER_RUST_VERSION: "1.75"
@@ -263,15 +265,32 @@ jobs:
           mv $msi.FullName "../../SignOutput/${{ env.APP_NAME }}-${{ env.VERSION }}-x86_64.msi"
           popd
 
-      - name: Publish Release
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+      - name: Checksums
+        shell: bash
+        run: |
+          cd SignOutput
+          sha256sum *.msi *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Build provenance attestation
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          name: ${{ matrix.display_name }} ${{ env.VERSION }}
-          body: |
-            ShareDesk Pro for Windows x64, built from this repository (based on RustDesk, AGPL-3.0).
-            The server address and key are built in.
-          files: |
-            ./SignOutput/*.msi
-            ./SignOutput/*.exe
+          subject-path: |
+            SignOutput/*.msi
+            SignOutput/*.exe
+
+      # Each build gets its own tag; with release immutability enabled the
+      # files of a published release can never be replaced.
+      - name: Publish Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ env.TAG_NAME }}-${{ env.VERSION }}-b${{ github.run_number }}
+        run: |
+          gh release create "$RELEASE_TAG" SignOutput/*.msi SignOutput/*.exe SignOutput/SHA256SUMS.txt \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --prerelease \
+            --title "${{ matrix.display_name }} ${{ env.VERSION }} (build ${{ github.run_number }})" \
+            --notes "ShareDesk Pro for Windows x64, built from this repository (based on RustDesk, AGPL-3.0). The server address and key are built in.
+
+          Verify a download: compare its SHA-256 with SHA256SUMS.txt, or run
+          gh attestation verify <file> -R ${{ github.repository }}"

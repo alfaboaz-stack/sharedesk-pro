@@ -18,7 +18,8 @@ Enforced on the server, so a modified client cannot bypass it.
 - `apply_allowlist.py`: adds the module and a few one-line hooks to a
   rustdesk-server checkout; fails if an anchor moved.
 - `deploy.sh`: installs it on the server (`prepare`, `activate`, `status`, `rollback`).
-- Build: Actions ‣ "ShareDesk Pro - server build" → release `sharedesk-server`.
+- Build: Actions ‣ "ShareDesk Pro - server build" → release `sharedesk-server-b<build number>`
+  (each build has its own release; its `deploy.sh` installs exactly that build).
 
 ## Approving a master
 Edit `allowed_ids.txt` in the private repo `alfaboaz-stack/sharedesk-devices`:

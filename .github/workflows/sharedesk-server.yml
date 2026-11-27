@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   # rustdesk/rustdesk-server commit the allowlist patch was written and tested against.
@@ -19,10 +21,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout ShareDesk Pro
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Checkout rustdesk-server
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           repository: ${{ env.SERVER_REPO }}
           ref: ${{ env.SERVER_REF }}
@@ -54,7 +56,7 @@ jobs:
           rustup target add "$TARGET"
 
       - name: Install cross
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@073e1fd0bc889c9aee68dbaaa927cde1b5653a83 # v2.90.11
         with:
           tool: cross
 
@@ -67,25 +69,37 @@ jobs:
         run: cross build --release --target "$TARGET" --bin hbbs --bin hbbr
 
       - name: Package
+        env:
+          RELEASE_TAG: ${{ env.TAG_NAME }}-b${{ github.run_number }}
         run: |
           mkdir -p out
           cp "rds/target/$TARGET/release/hbbs" "rds/target/$TARGET/release/hbbr" out/
           cp server/deploy.sh out/
+          # deploy.sh downloads exactly the binaries of this release.
+          sed -i "s|releases/download/sharedesk-server\"|releases/download/$RELEASE_TAG\"|" out/deploy.sh
+          grep -q "releases/download/$RELEASE_TAG\"" out/deploy.sh
           chmod +x out/*
           file out/hbbs out/hbbr
           cd out && sha256sum hbbs hbbr deploy.sh > SHA256SUMS && cat SHA256SUMS
 
-      - name: Publish release
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+      - name: Build provenance attestation
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          name: ShareDesk Pro server (approved masters only)
-          body: |
-            hbbs/hbbr from rustdesk-server ${{ env.SERVER_REF }} with the ShareDesk Pro approved-masters allowlist (AGPL-3.0).
-            Patch: server/allowlist.rs, server/apply_allowlist.py. Install: server/README.md.
-          files: |
+          subject-path: |
             out/hbbs
             out/hbbr
             out/deploy.sh
-            out/SHA256SUMS
+
+      # Each build gets its own tag; with release immutability enabled the
+      # files of a published release can never be replaced.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ env.TAG_NAME }}-b${{ github.run_number }}
+        run: |
+          gh release create "$RELEASE_TAG" out/hbbs out/hbbr out/deploy.sh out/SHA256SUMS \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --prerelease \
+            --title "ShareDesk Pro server (approved masters only), build ${{ github.run_number }}" \
+            --notes "hbbs/hbbr from rustdesk-server ${{ env.SERVER_REF }} with the ShareDesk Pro approved-masters allowlist (AGPL-3.0). Patch: server/allowlist.rs, server/apply_allowlist.py. Install: server/README.md.
+
+          Verify a download: gh attestation verify <file> -R ${{ github.repository }}"
